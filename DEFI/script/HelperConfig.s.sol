@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { Script } from "forge-std/Script.sol";
-import { MockV3Aggregator} from "../test/mocks/MockV3Aggregator.sol";
-import { ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {Script} from "forge-std/Script.sol";
+import {MockV3Aggregator} from "../test/mocks/MockV3Aggregator.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
 contract HelperConfig is Script {
     struct NetworkConfig {
@@ -22,9 +22,9 @@ contract HelperConfig is Script {
     NetworkConfig public activeNetworkConfig;
 
     constructor() {
-        if(block.chainid == 11155111){
+        if (block.chainid == 11155111) {
             activeNetworkConfig = getSepoliaEthConfig();
-        }else{
+        } else {
             activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
     }
@@ -39,8 +39,8 @@ contract HelperConfig is Script {
         });
     }
 
-    function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory){
-        if(activeNetworkConfig.wethUsdPriceFeed != address(0)){
+    function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
+        if (activeNetworkConfig.wethUsdPriceFeed != address(0)) {
             return activeNetworkConfig;
         }
 
@@ -48,7 +48,6 @@ contract HelperConfig is Script {
         MockV3Aggregator ethUsdPriceFeed = new MockV3Aggregator(DECIMALS, ETH_USD_PRICE);
         // ERC20Mock wethMock = new ERC20Mock("WETH", "WETH", msg.sender, MINT_AMOUNT);
         ERC20Mock wethMock = new ERC20Mock();
-
 
         MockV3Aggregator btcUsdPriceFeed = new MockV3Aggregator(DECIMALS, BTC_USD_PRICE);
         // ERC20Mock wbtcMock = new ERC20Mock("WBTC", "WBTC", msg.sender, MINT_AMOUNT);

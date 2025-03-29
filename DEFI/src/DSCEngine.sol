@@ -56,7 +56,7 @@ contract DSCEngine is ReentrancyGuard {
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
-    uint256 private constant PRECISION = 1e10;
+    uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant MIN_HEALTH_FACTOR = 1;
@@ -111,7 +111,17 @@ contract DSCEngine is ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    function depositCollateralAndMintDSC() external {}
+    
+    /**
+     * @param tokenCollateralAddress The address of the collateral token being used in the DSC Engine.
+     * @param amountCollateral The amount of collateral to deposit into the DSC Engine.
+     * @param amountDSCToMint The amount of DSC to mint
+     * @notice this function will deposit your collateral and mint DSC in one go
+     */
+    function depositCollateralAndMintDSC(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDSCToMint) external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintDSC(amountDSCToMint);
+    }
 
     /**
      * @notice follows CEI (checks Effect Interaction)
@@ -119,7 +129,7 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountCollateral The amount of collateral to deposit
      */
     function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
-        external
+        public
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
@@ -133,6 +143,8 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     function redeemCollateralForDSC() external {}
+
+    
     function redeemCollateral() external {}
 
     // 1. Check if the collateral value > DSC amount. Price feeds, Values etc
@@ -141,12 +153,12 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountDSCToMint The amount of decentralized stable coin to mint
      * @notice they must have collateral value than the minimum threshold
      */
-    function mintDSC(uint256 amountDSCToMint) external moreThanZero(amountDSCToMint) nonReentrant {
+    function mintDSC(uint256 amountDSCToMint) public moreThanZero(amountDSCToMint) nonReentrant {
         s_DSCMinted[msg.sender] += amountDSCToMint;
         // if they minted too much ($150 DSC, $100 ETH)
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_dsc.mint(msg.sender, amountDSCToMint);
-        if(!minted){
+        if (!minted) {
             revert DSCEngine__MintFailed();
         }
     }
@@ -190,11 +202,9 @@ contract DSCEngine is ReentrancyGuard {
         // 1. Check Health Factor (collateral value / DSC value) (do they have enough collateral?)
         // 2. Revert if they dont
         uint256 userHealthFactor = _healthFactor(user);
-        if(userHealthFactor < MIN_HEALTH_FACTOR){
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
             revert DSCEngine__BreakdHealthFactor();
         }
-
-
     }
 
     /*//////////////////////////////////////////////////////////////
