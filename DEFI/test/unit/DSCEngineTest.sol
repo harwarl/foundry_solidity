@@ -67,6 +67,10 @@ contract DSCEngineTest is Test {
     }
 
     // ------------------------------ depositCollateralTests ------------------------------
+
+
+
+
     function testIfCollateralIsZero() public {
         vm.startPrank(USER);
 
@@ -92,6 +96,11 @@ contract DSCEngineTest is Test {
         dscEngine.depositCollateral(weth, AMOUNT_COLLATERAL);
         vm.stopPrank();
         _;
+    }
+
+    function testCanDepositCollateralWithoutMintingDSC() public depositCollateral {
+       uint256 userBalance = dsc.balanceOf(USER);
+       assertEq(userBalance, 0, "User should not have any DSC minted yet");
     }
 
     modifier depositCollateralAndMintDSC() {
@@ -184,10 +193,11 @@ contract DSCEngineTest is Test {
 
     function testRevertsIfHealthFactorBreaks() public depositCollateralAndMintDSC {
         uint256 excessiveRedeem = AMOUNT_COLLATERAL;
-
         vm.startPrank(USER);
         vm.expectRevert(DSCEngine.DSCEngine__BreakdHealthFactor.selector);
         dscEngine.redeemCollateral(address(weth), excessiveRedeem);
         vm.stopPrank();
     }
+
+    // function
 }
