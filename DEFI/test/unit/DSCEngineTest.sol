@@ -7,6 +7,11 @@ import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DecentralizedStableCoin} from "../../src/DecentralizedStableCoin.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {MockFailedMintDSC} from "../mocks/MockFailedMintDSC.sol";
+import {MockMoreDebtDSC} from "../mocks/MockMoreDebtDSC.sol";
+import {MockFailedTransfer} from "../mocks/MockFailedTransfer.sol";
+import {MockFakeTransferFrom} from "../mocks/MockFakeTransferFrom.sol";
+import {MockFailedMintDSC} from "../mocks/MockFailedMintDSC.sol";
 
 contract DSCEngineTest is Test {
     DeployDSC deployer;
@@ -67,9 +72,6 @@ contract DSCEngineTest is Test {
     }
 
     // ------------------------------ depositCollateralTests ------------------------------
-
-
-
 
     function testIfCollateralIsZero() public {
         vm.startPrank(USER);
@@ -135,6 +137,14 @@ contract DSCEngineTest is Test {
         dscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
     }
 
+    // function testRevertsWithUnapprovedCollateral() public {
+    //     ERC20Mock ranToken = new ERC20Mock();
+    //     vm.startPrank(USER);
+    //     vm.expectRevert(abi.encodeWithSelector(DSCEngine.DSCEngine__TokenNotAllowed.selector, address(ranToken)));
+    //     dscEngine.depositCollateral(weth, AMOUNT_COLLATERAL);
+    //     vm.stopPrank();
+    // }
+
     function testEmitsCollateralDepositedWhenDepositingCollateral() public {
         vm.startPrank(USER);
 
@@ -199,5 +209,162 @@ contract DSCEngineTest is Test {
         vm.stopPrank();
     }
 
-    // function
+    // ------------------------------ MintDSC test ------------------------------
+    function  testRevertsIfMintFails() public {
+        MockFailedMintDSC mockFailedMintDSC = new MockFailedMintDSC();
+        tokenAddresses = [weth];
+        priceFeedAddresses = [wethUsdPriceFeed];
+        address owner = msg.sender;
+
+        vm.prank(owner);
+        DSCEngine mockDscEngine = new DSCEngine(tokenAddresses, priceFeedAddresses, address(mockFailedMintDSC));
+
+        mockFailedMintDSC.transferOwnership(address(mockDscEngine));
+        vm.startPrank(USER);
+
+        ERC20Mock(weth).approve(address(mockDscEngine), AMOUNT_COLLATERAL);
+
+        vm.expectRevert(DSCEngine.DSCEngine__MintFailed.selector);
+        mockDscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+    }
+
+
+    function testRevertsIfMintAmountIsZero() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        dscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, 0);
+        vm.stopPrank();
+    }
+
+    function testCanMintDSC() public depositCollateral {
+        vm.startPrank(USER);
+        dscEngine.mintDSC(AMOUNT_DSC_TO_MINT);
+        uint256 userBalance = dsc.balanceOf(USER);
+        assertEq(userBalance, AMOUNT_DSC_TO_MINT);
+    }
+
+
+    // ------------------------------ BURN DSC tests ------------------------------
+    function testRevertsIfBurnAmountIsZero() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        dscEngine.burnDSC(0);
+        vm.stopPrank();
+    }
+
+    function testCanBurnMoreThanUserHas() public {
+        vm.prank(USER);
+        vm.expectRevert();
+        dscEngine.burnDSC( 1 ether); // User has 0 DSC, so this should revert
+    }
+
+    function testCanBurnDSC() public depositCollateralAndMintDSC {
+        vm.startPrank(USER);
+       
+       dsc.approve(address(dscEngine), AMOUNT_DSC_TO_MINT);
+       
+       dscEngine.burnDSC(AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+
+        uint256 userBalance = dsc.balanceOf(USER);
+        assertEq(userBalance, 0);
+    }
+
+
+    // ------------------------------ Redeem Collateral ------------------------------
+    function testRevertsIfTransferFails() public {
+        // Arrange - Setup
+        address owner = msg.sender;
+        vm.prank(owner);
+        MockFailedTransfer mockDsc = new MockFailedTransfer();
+        tokenAddresses = [address(mockDsc)];
+        priceFeedAddresses = [wethUsdPriceFeed];
+        vm.prank(owner);
+        DSCEngine mockDsce = new DSCEngine(tokenAddresses, priceFeedAddresses, address(mockDsc));
+        mockDsc.mint(USER, AMOUNT_COLLATERAL);
+
+
+        vm.prank(owner);
+        mockDsc.transferOwnership(address(mockDsce));
+
+        // Arrange User
+        vm.startPrank(USER);
+        ERC20Mock(address(mockDsc)).approve(address(mockDsce), AMOUNT_COLLATERAL);
+
+        // Act / Assert
+        mockDsce.depositCollateral(address(mockDsc), AMOUNT_COLLATERAL);
+        vm.expectRevert(DSCEngine.DSCEngine__TransferFailed.selector);
+        mockDsce.redeemCollateral(address(mockDsc), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+
+    function testRevertsifAmountIsZero() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        dscEngine.redeemCollateral(address(weth), 0);
+        vm.stopPrank();
+    }
+
+    function testRevertIfTokenIsNotAllowed() public {
+        ERC20Mock ranToken = new ERC20Mock();
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateralAndMintDSC(address(weth), AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        vm.expectRevert(DSCEngine.DSCEngine__TokenNotAllowed.selector);
+        dscEngine.redeemCollateral(address(ranToken), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+    function testCanRedeemCollateral() public depositCollateral() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        uint256 userBalanceBeforeRedeem = dscEngine.getCollateralBalanceOfUser(USER, address(weth));
+        assertEq(userBalanceBeforeRedeem, AMOUNT_COLLATERAL);
+
+        dscEngine.redeemCollateral(address(weth), AMOUNT_COLLATERAL);
+        uint256 userBalanceAfterRedeem = dscEngine.getCollateralBalanceOfUser(USER, address(weth));
+
+        assertEq(userBalanceAfterRedeem, 0);
+        vm.stopPrank();
+    }
+
+    function testEmitCollateralRedeemedWithCorrectArgs() public depositCollateral() {
+        vm.expectEmit(true, true, true, true, address(dscEngine));
+        emit CollateralRedeemed(address(USER), address(USER), address(weth), AMOUNT_COLLATERAL);
+        vm.startPrank(address(USER));
+        dscEngine.redeemCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+
+    // ------------------------------ Redeem collateral for DSC tests ------------------------------
+    function testMustRedeemMoreThanZero() public depositCollateralAndMintDSC() {
+        vm.startPrank(USER);
+        dsc.approve(address(dscEngine), AMOUNT_DSC_TO_MINT);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        dscEngine.redeemCollateralForDSC(weth, 0, AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+    }
+
+    function testCanRedeemDepositedCollateral() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateralAndMintDSC(weth, AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        dsc.approve(address(dscEngine), AMOUNT_DSC_TO_MINT);
+        dscEngine.redeemCollateralForDSC(weth, AMOUNT_COLLATERAL, AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+
+        uint256 USERBalance = dsc.balanceOf(USER);
+        assertEq(USERBalance, 0);
+    }
+
+
+    // ------------------------------ Health Factor tests ------------------------------
 }

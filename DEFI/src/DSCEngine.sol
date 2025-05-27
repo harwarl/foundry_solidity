@@ -309,6 +309,7 @@ contract DSCEngine is ReentrancyGuard {
         // Total DSC minted
         // Total collateral value
         (uint256 totalDSCMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
+        if (totalDSCMinted == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
         return (collateralAdjustedForThreshold * PRECISION) / totalDSCMinted;
     }
@@ -360,4 +361,10 @@ contract DSCEngine is ReentrancyGuard {
     {
         (totalDSCMinted, collateralValueInUsd) = _getAccountInformation(user);
     }
+
+
+    function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+        return s_collateralDeposited[user][token];
+    }
+    
 }
